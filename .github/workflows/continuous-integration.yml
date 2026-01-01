@@ -3,7 +3,7 @@ name: "CI: PHPUnit"
 on:
   pull_request:
     branches:
-      - "*.x"
+      - "cwci-2350-locked-v2-base"
     paths:
       - .github/workflows/continuous-integration.yml
       - config/**
@@ -12,17 +12,8 @@ on:
       - src/**
       - templates/**
       - tests/**
-  push:
-    branches:
-      - "*.x"
-    paths:
-      - .github/workflows/continuous-integration.yml
-      - config/**
-      - composer.*
-      - phpunit.xml.dist
-      - src/**
-      - templates/**
-      - tests/**
+permissions:
+  contents: read
 
 jobs:
   phpunit:
@@ -60,37 +51,44 @@ jobs:
           # Tests the lowest set of dependencies
           - dependencies: "lowest"
             php-version: "8.4"
+            cwci-lock: "a05410d3144a66700dc500b875e60f7e9d27b278e9152e0450a8d180f7a9abc1"
 
           # Test legacy LTS
           - symfony-require: "6.4.*"
             dependencies: "highest"
             php-version: "8.5"
+            cwci-lock: "36a958a962918c855fb3d733c4a654231fdd29ff2aab17e2dc0bfc3d1fd43503"
 
           # Test LTS
           - symfony-require: "7.4.*"
             dependencies: "highest"
             php-version: "8.5"
+            cwci-lock: "152c4f864bb14493faeba26a7880f6ecf7b9666c73a85ce408aba880e023b2ec"
 
           # Test non-LTS
           - symfony-require: "8.1.*"
             dependencies: "highest"
             php-version: "8.5"
+            cwci-lock: "8cc9d33438809d7767789e957a0f78d50de330e162e1d2b82f62b74710c07469"
 
           # DBAL only without ORM
           - php-version: "8.5"
             dependencies: "highest"
             stability: "stable"
             remove-orm: true
+            cwci-lock: "73e86022e31053aa698501db32585076b9582cde775be137be3b4694542f3e1a"
 
           # No Messenger integration
           - php-version: "8.5"
             dependencies: "highest"
             remove-doctrine-messenger: true
+            cwci-lock: "156a7b257706edcf1e8ff5dadd7d32cb0359c3a80c1bf6ec7b8f6a6f81887cfe"
 
           # Bleeding edge
           - php-version: "8.5"
             dependencies: "highest"
             stability: "dev"
+            cwci-lock: "69c2fedf011c77afe908ad86d7155aad5298f3b548909169a17153c7e62c39e6"
 
           # Doctrine ORM before 3.8 reads the global type registry instead of the type
           # provider of the connection.
@@ -98,6 +96,7 @@ jobs:
             dependencies: "highest"
             stability: "dev"
             orm-version: "~3.7.5"
+            cwci-lock: "cf64525e8ef17e102d69d6a6df70e5fc71814517875b490fb6350998b6fb98e4"
 
     steps:
       - name: "Checkout"
@@ -126,45 +125,35 @@ jobs:
         run: "composer remove symfony/doctrine-messenger --dev --no-update"
         if: "${{ matrix.remove-doctrine-messenger }}"
 
+      - name: Restore historical Composer lock
+        env:
+          LOCK_DIGEST: "${{ matrix.cwci-lock || '824790ae70e742baaf304c04fd8760198150a5a43358f652de5b2e5cf881238e' }}"
+        run: |
+          set -euo pipefail
+          git fetch --quiet --depth=1 origin c0c3987adc05bbe3671f16096389ca7d06ef8913
+          git show "FETCH_HEAD:$LOCK_DIGEST.lock" > composer.lock
+          echo "$LOCK_DIGEST  composer.lock" | sha256sum -c -
+
       - name: "Install dependencies with Composer"
         uses: "ramsey/composer-install@v4"
         with:
-          dependency-versions: "${{ matrix.dependencies }}"
+          dependency-versions: "locked"
           # The temporary constraint combines with the one of composer.json instead of
           # replacing it.
-          composer-options: "--prefer-dist ${{ matrix.orm-version && format('--with=doctrine/orm:{0}', matrix.orm-version) }}"
+          composer-options: "--prefer-dist"
+
+      - name: Verify installed historical package revisions
+        run: |
+          python3 - <<'PYLOCK'
+          import json
+          lock=json.load(open("composer.lock"))
+          installed=json.load(open("vendor/composer/installed.json"))["packages"]
+          def versions(rows):
+              return {p["name"]:(p["version"],(p.get("source") or p["dist"])["reference"]) for p in rows}
+          assert versions(installed)==versions(lock["packages"]+lock["packages-dev"])
+          print("Verified historical revisions for",len(installed),"installed packages")
+          PYLOCK
 
       - name: "Run PHPUnit"
         run: "vendor/bin/phpunit --coverage-clover=coverage.xml"
 
-      - name: "Upload coverage file"
-        uses: "actions/upload-artifact@v7"
-        with:
-          name: "phpunit-${{ matrix.php-version }}-${{ matrix.dependencies }}-${{ hashFiles('composer.lock') }}.coverage"
-          path: "coverage.xml"
-
-  upload_coverage:
-    name: "Upload coverage to Codecov"
-    runs-on: "ubuntu-latest"
-    # Only run on PRs from forks or PRs from branches that do not match `*.x`
-    if: "github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.head.ref, '.x')"
-    needs:
-      - "phpunit"
-
-    steps:
-      - name: "Checkout"
-        uses: "actions/checkout@v7"
-        with:
-          fetch-depth: 2
-
-      - name: "Download coverage files"
-        uses: "actions/download-artifact@v8"
-        with:
-          path: "reports"
-
-      - name: "Upload to Codecov"
-        uses: "codecov/codecov-action@v7"
-        with:
-          directory: reports
-        env:
-          CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
