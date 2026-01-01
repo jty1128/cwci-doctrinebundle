@@ -4,7 +4,7 @@ name: "Static Analysis"
 on:
   pull_request:
     branches:
-      - "*.x"
+      - "cwci-2350-locked-v1-base"
     paths:
       - .github/workflows/static-analysis.yml
       - config/**
@@ -12,16 +12,8 @@ on:
       - phpstan.neon.dist
       - src/**
       - tests/**
-  push:
-    branches:
-      - "*.x"
-    paths:
-      - .github/workflows/static-analysis.yml
-      - config/**
-      - composer.*
-      - phpstan.neon.dist
-      - src/**
-      - tests/**
+permissions:
+  contents: read
 
 jobs:
   static-analysis:
@@ -38,8 +30,29 @@ jobs:
           coverage: "none"
           php-version: "8.4"
 
+      - name: Restore historical Composer lock
+        env:
+          LOCK_DIGEST: "69c2fedf011c77afe908ad86d7155aad5298f3b548909169a17153c7e62c39e6"
+        run: |
+          set -euo pipefail
+          git fetch --quiet --depth=1 origin c0c3987adc05bbe3671f16096389ca7d06ef8913
+          git show "FETCH_HEAD:$LOCK_DIGEST.lock" > composer.lock
+          echo "$LOCK_DIGEST  composer.lock" | sha256sum -c -
+
       - name: "Install dependencies with Composer"
         uses: "ramsey/composer-install@v3"
+
+      - name: Verify installed historical package revisions
+        run: |
+          python3 - <<'PYLOCK'
+          import json
+          lock=json.load(open("composer.lock"))
+          installed=json.load(open("vendor/composer/installed.json"))["packages"]
+          def versions(rows):
+              return {p["name"]:(p["version"],(p.get("source") or p["dist"])["reference"]) for p in rows}
+          assert versions(installed)==versions(lock["packages"]+lock["packages-dev"])
+          print("Verified historical revisions for",len(installed),"installed packages")
+          PYLOCK
 
       - name: "Warm up Symfony cache"
         run: "php tests/console-application.php"

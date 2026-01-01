@@ -1,0 +1,79 @@
+
+name: "Coding Standards"
+
+on:
+  workflow_call:
+    inputs:
+      php-version:
+        description: "The PHP version to use when running the job"
+        default: "8.5"
+        required: false
+        type: "string"
+      composer-root-version:
+        description: "The version of the package being tested, in case of circular dependencies."
+        required: false
+        type: "string"
+      composer-dependency-versions:
+        description: "whether the job should install the locked, highest, or lowest versions of Composer dependencies."
+        default: "highest"
+        required: false
+        type: "string"
+      composer-options:
+        description: "Additional flags for the composer install command."
+        default: "--prefer-dist"
+        required: false
+        type: "string"
+
+jobs:
+  coding-standards:
+    name: "Coding Standards (PHP: ${{ inputs.php-version }})"
+    runs-on: "ubuntu-22.04"
+
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v6"
+
+      - name: "Install PHP"
+        uses: "shivammathur/setup-php@v2"
+        with:
+          coverage: "none"
+          ini-file: development
+          php-version: "${{ inputs.php-version }}"
+          tools: "cs2pr"
+
+      - name: "Set COMPOSER_ROOT_VERSION"
+        run: |
+          echo "COMPOSER_ROOT_VERSION=${{ inputs.composer-root-version }}" >> $GITHUB_ENV
+        if: "${{ inputs.composer-root-version }}"
+
+      - name: Restore historical Composer lock
+        env:
+          LOCK_DIGEST: "fdc6d3189cd8bfb33a7854644934989092f7bd5dd4f4cf6ccf84a9d65f2650df"
+        run: |
+          set -euo pipefail
+          git fetch --quiet --depth=1 origin c0c3987adc05bbe3671f16096389ca7d06ef8913
+          git show "FETCH_HEAD:$LOCK_DIGEST.lock" > composer.lock
+          echo "$LOCK_DIGEST  composer.lock" | sha256sum -c -
+
+      - name: "Install dependencies with Composer"
+        uses: "ramsey/composer-install@v4"
+        with:
+          dependency-versions: "${{ inputs.composer-dependency-versions }}"
+          composer-options: "${{ inputs.composer-options }}"
+
+      - name: Verify installed historical package revisions
+        run: |
+          python3 - <<'PYLOCK'
+          import json
+          lock=json.load(open("composer.lock"))
+          installed=json.load(open("vendor/composer/installed.json"))["packages"]
+          def versions(rows):
+              return {p["name"]:(p["version"],(p.get("source") or p["dist"])["reference"]) for p in rows}
+          assert versions(installed)==versions(lock["packages"]+lock["packages-dev"])
+          print("Verified historical revisions for",len(installed),"installed packages")
+          PYLOCK
+
+      - name: "Run PHP_CodeSniffer"
+        run: |
+          vendor/bin/phpcs --report-emacs --report-diff || true
+          vendor/bin/phpcs --no-colors --report=checkstyle | cs2pr
