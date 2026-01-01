@@ -4,7 +4,7 @@ name: "Coding Standards"
 on:
   pull_request:
     branches:
-      - "*.x"
+      - "cwci-042cced3905d1075b32e-base"
     paths:
       - .github/workflows/coding-standards.yml
       - config/**
@@ -12,20 +12,12 @@ on:
       - phpcs.xml.dist
       - src/**
       - tests/**
-  push:
-    branches:
-      - "*.x"
-    paths:
-      - .github/workflows/coding-standards.yml
-      - config/**
-      - composer.*
-      - phpcs.xml.dist
-      - src/**
-      - tests/**
+permissions:
+  contents: read
 
 jobs:
   coding-standards:
     name: "Coding Standards"
-    uses: "doctrine/.github/.github/workflows/coding-standards.yml@15.1.0"
+    uses: "doctrine/.github/.github/workflows/coding-standards.yml@e57a8e33d799351a8c04f0b6d42e6568808a50d8"
     with:
       composer-options: "--prefer-dist --prefer-stable"
