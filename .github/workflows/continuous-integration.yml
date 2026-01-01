@@ -3,7 +3,7 @@ name: "CI: PHPUnit"
 on:
   pull_request:
     branches:
-      - "*.x"
+      - "cwci-39e4f4c8e527fefdab56-base"
     paths:
       - .github/workflows/continuous-integration.yml
       - config/**
@@ -12,17 +12,8 @@ on:
       - src/**
       - templates/**
       - tests/**
-  push:
-    branches:
-      - "*.x"
-    paths:
-      - .github/workflows/continuous-integration.yml
-      - config/**
-      - composer.*
-      - phpunit.xml.dist
-      - src/**
-      - templates/**
-      - tests/**
+permissions:
+  contents: read
 
 jobs:
   phpunit:
@@ -36,7 +27,7 @@ jobs:
       ${{ matrix.remove-orm && ' - remove ORM' }}
       ${{ matrix.remove-doctrine-messenger && ' - remove Messenger' }}
       ${{ matrix.orm-version && format(' - ORM {0}', matrix.orm-version) }}
-    runs-on: "ubuntu-latest"
+    runs-on: ubuntu-24.04
     env:
       SYMFONY_REQUIRE: ${{matrix.symfony-require}}
       SYMFONY_DEPRECATIONS_HELPER: weak
@@ -137,34 +128,3 @@ jobs:
       - name: "Run PHPUnit"
         run: "vendor/bin/phpunit --coverage-clover=coverage.xml"
 
-      - name: "Upload coverage file"
-        uses: "actions/upload-artifact@v7"
-        with:
-          name: "phpunit-${{ matrix.php-version }}-${{ matrix.dependencies }}-${{ hashFiles('composer.lock') }}.coverage"
-          path: "coverage.xml"
-
-  upload_coverage:
-    name: "Upload coverage to Codecov"
-    runs-on: "ubuntu-latest"
-    # Only run on PRs from forks or PRs from branches that do not match `*.x`
-    if: "github.event.pull_request.head.repo.full_name != github.repository || !contains(github.event.pull_request.head.ref, '.x')"
-    needs:
-      - "phpunit"
-
-    steps:
-      - name: "Checkout"
-        uses: "actions/checkout@v7"
-        with:
-          fetch-depth: 2
-
-      - name: "Download coverage files"
-        uses: "actions/download-artifact@v8"
-        with:
-          path: "reports"
-
-      - name: "Upload to Codecov"
-        uses: "codecov/codecov-action@v7"
-        with:
-          directory: reports
-        env:
-          CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"

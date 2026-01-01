@@ -4,7 +4,7 @@ name: "Static Analysis"
 on:
   pull_request:
     branches:
-      - "*.x"
+      - "cwci-39e4f4c8e527fefdab56-base"
     paths:
       - .github/workflows/static-analysis.yml
       - config/**
@@ -12,21 +12,13 @@ on:
       - phpstan.neon.dist
       - src/**
       - tests/**
-  push:
-    branches:
-      - "*.x"
-    paths:
-      - .github/workflows/static-analysis.yml
-      - config/**
-      - composer.*
-      - phpstan.neon.dist
-      - src/**
-      - tests/**
+permissions:
+  contents: read
 
 jobs:
   static-analysis:
     name: "PHPStan"
-    runs-on: "ubuntu-latest"
+    runs-on: ubuntu-24.04
 
     steps:
       - name: "Checkout code"
