@@ -1,0 +1,13 @@
+name: Runner image observation
+on:
+  push:
+    branches: [cwci-runner-observation-20261127]
+permissions: {}
+jobs:
+  observe:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, ubuntu-26.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: printenv ImageOS ImageVersion
