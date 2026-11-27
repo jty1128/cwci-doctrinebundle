@@ -1,0 +1,26 @@
+name: Check runner ubuntu-26.04
+on:
+  push:
+    branches: [cwci-guard-check-20261127]
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Verify historical runner before checkout
+        shell: bash
+        run: |
+          set -eu
+          p=$PPID
+          while [ "$p" -gt 1 ]; do
+            exe=$(readlink /proc/"$p"/exe || true)
+            if [[ $exe == */Runner.Worker ]]; then break; fi
+            p=$(awk '/^PPid:/{print $2}' /proc/"$p"/status)
+          done
+          [[ ${exe:-} == */Runner.Worker ]]
+          agent=$("${exe%/*}/Runner.Listener" --version)
+          case "${ImageOS:-}:${ImageVersion:-}:$agent" in
+            ubuntu26:20261122.9.1:2.338.2) ;;
+            *) echo "Assigned runner differs from historical success"; exit 1 ;;
+          esac
+      - run: echo verified-runner
